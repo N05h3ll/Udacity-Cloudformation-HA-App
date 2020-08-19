@@ -1,0 +1,256 @@
+Description: This file contains the defenition of the load balancer and auto scaling group with what they need of resources.
+
+##TODO CHANGE AMI TO ANOTHE ONE
+
+Parameters:
+  ENV:
+    Type: String
+    Default: udacityHAAPP
+  privateSubnet1CidrBlock:
+    Type: String
+    Default: 10.0.1.0/24
+
+  privateSubnet2CidrBlock:
+    Type: String
+    Default: 10.0.2.0/24
+
+  publicSubnet1CidrBlock:
+    Type: String
+    Default: 10.0.3.0/24
+
+  publicSubnet2CidrBlock:
+    Type: String
+    Default: 10.0.4.0/24
+
+################################################################################################
+
+Resources:
+  IAMRoleAllowEC2GetS3:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Path: /
+      Policies:
+        - PolicyName: AllowEC2GetS3
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: "s3:Get*"
+                Resource: "arn:aws:s3:::*"
+      Tags:
+        - Key: Name
+          Value: !Sub ${ENV} IAM Role EC2 get S3
+
+  instanceProfileAllowEC2GetS3:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref IAMRoleAllowEC2GetS3
+
+  applicationServersSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http Access to load balancer and shh access to bastion hosts.
+      VpcId:
+        Fn::ImportValue: !Sub ${ENV}-VPC
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: "tcp"
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref publicSubnet1CidrBlock
+        - IpProtocol: "tcp"
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref publicSubnet2CidrBlock
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${ENV} security group for application servers.
+
+  loadbalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http inbound and outbound to loadbalancer.
+      VpcId:
+        Fn::ImportValue: !Sub ${ENV}-VPC
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: "tcp"
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  bastionHostSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow ssh access to the bastion hosts
+      VpcId:
+        Fn::ImportValue: !Sub ${ENV}-VPC
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: "tcp"
+          ToPort: 22
+          FromPort: 22
+          CidrIp: !Ref privateSubnet1CidrBlock
+        - IpProtocol: "tcp"
+          ToPort: 22
+          FromPort: 22
+          CidrIp: !Ref privateSubnet2CidrBlock
+      Tags:
+        - Key: Name
+          Value: !Sub ${ENV} security group for bastion hosts
+
+  appLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      Name: appLoadBalancer
+      SecurityGroups:
+        - !Ref loadbalancerSecurityGroup
+      Subnets:
+        - Fn::ImportValue: !Sub ${ENV}-publicSubnet1
+        - Fn::ImportValue: !Sub ${ENV}-publicSubnet2
+
+  appLoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref appTargetGroup
+      LoadBalancerArn: !Ref appLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  appLoadBalancerListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref appTargetGroup
+      Conditions:
+        - Field: path-pattern
+          Values: [/]
+      ListenerArn: !Ref appLoadBalancerListener
+      Priority: 1
+
+  appTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 40
+      HealthCheckPath: /
+      HealthCheckPort: "80"
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 30
+      HealthyThresholdCount: 2
+      Name: appTargetGroup
+      Port: 80
+      Protocol: HTTP
+      VpcId:
+        Fn::ImportValue: !Sub ${ENV}-VPC
+
+  appLaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: ami-04932daa2567651e7
+      InstanceType: t2.micro
+      IamInstanceProfile: !Ref instanceProfileAllowEC2GetS3
+      BlockDeviceMappings:
+        - DeviceName: "/dev/sdk"
+          Ebs:
+            VolumeSize: 10
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          sudo apt-get update -y
+          sudo apt-get install unzip awscli -y
+          sudo apt-get install apache2 -y
+          sudo systemctl start apache2.service
+          cd /var/www/html
+          aws s3 cp s3://udacity-demo-1/udacity.zip .
+          unzip -o udacity.zip
+      SecurityGroups:
+        - !Ref applicationServersSecurityGroup
+
+  bastionLaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      AssociatePublicIpAddress: true
+      KeyName: awsKey
+      ImageId: ami-04932daa2567651e7
+      InstanceType: t2.micro
+      BlockDeviceMappings:
+        - DeviceName: "/dev/sdk"
+          Ebs:
+            VolumeSize: 5
+      SecurityGroups:
+        - !Ref bastionHostSecurityGroup
+
+  autoscalingGroup1:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      TargetGroupARNs:
+        - !Ref appTargetGroup
+      AutoScalingGroupName: appAutoScallingGroup
+      MinSize: "1"
+      MaxSize: "10"
+      DesiredCapacity: "2"
+      HealthCheckGracePeriod: 300
+      LaunchConfigurationName: !Ref appLaunchConfiguration
+      VPCZoneIdentifier:
+        - Fn::ImportValue: !Sub ${ENV}-privateSubnetsList
+
+  autoscalingGroup2:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      TargetGroupARNs:
+        - !Ref appTargetGroup
+      AutoScalingGroupName: appAutoScallingGroup2
+      MinSize: "1"
+      MaxSize: "10"
+      DesiredCapacity: "2"
+      HealthCheckGracePeriod: 300
+      LaunchConfigurationName: !Ref appLaunchConfiguration
+      VPCZoneIdentifier:
+        - Fn::ImportValue: !Sub ${ENV}-privateSubnetsList
+
+  bastionAutoscalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: Bastion
+      MinSize: "1"
+      MaxSize: "1"
+      DesiredCapacity: "1"
+      HealthCheckGracePeriod: 300
+      LaunchConfigurationName: !Ref bastionLaunchConfiguration
+      VPCZoneIdentifier:
+        - Fn::ImportValue: !Sub ${ENV}-publicSubnetsList
+
+Outputs:
+  loadBalancerDnsName:
+    Description:  website url with http:// appended
+    Value: !Join ["", ["http://", !GetAtt [appLoadBalancer, DNSName]]]
