@@ -6,6 +6,7 @@ Parameters:
   ENV:
     Type: String
     Default: udacityHAAPP
+
   privateSubnet1CidrBlock:
     Type: String
     Default: 10.0.1.0/24
