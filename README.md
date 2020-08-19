@@ -4,13 +4,13 @@
 
 ![Diagram](Diagram.png)
 
-You can test the application via this link : [Application URL: ](http://github.com)
+**You can test the application via this link** : [Application URL: ](http://github.com)
+
+#### NOTE : Bastion Host was added and tested the connection to the private subnets successfully, But it was removed due to project criteria saying that ssh "KeyName" property shouldn't be in the production launch configuration.
 
 
 
-
-
-The Basics
+##### **The Basics**
 
 - [x] Parameters
 	
@@ -19,14 +19,14 @@ The Basics
 - [x] Outputs
 
 
-Load Balancer
+##### **Load Balancer**
 
 - [x] Target Group
 	
 - [x] Health Check and Listener
 	
 
-Auto-Scaling
+##### **Auto-Scaling**
 
 - [x] Subnets
 	
@@ -35,6 +35,6 @@ Auto-Scaling
 - [x] SSH Key
 	
 
-Bonus
+##### **Bonus**
 
 - [x] Output
