@@ -3,4 +3,5 @@
 ### Providing an AWS infrastructure to serve an high availability application using cloudformation.
 
 ![Diagram](Diagram.png)
-Format: ![Infrastructure Diagram](url)
+
+[Application URL: ](http://github.com)

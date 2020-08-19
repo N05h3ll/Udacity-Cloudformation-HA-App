@@ -68,14 +68,6 @@ Resources:
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
-        - IpProtocol: "tcp"
-          FromPort: 22
-          ToPort: 22
-          CidrIp: !Ref publicSubnet1CidrBlock
-        - IpProtocol: "tcp"
-          FromPort: 22
-          ToPort: 22
-          CidrIp: !Ref publicSubnet2CidrBlock
       SecurityGroupEgress:
         - IpProtocol: "-1"
           CidrIp: 0.0.0.0/0
@@ -99,30 +91,6 @@ Resources:
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
-
-  bastionHostSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Allow ssh access to the bastion hosts
-      VpcId:
-        Fn::ImportValue: !Sub ${ENV}-VPC
-      SecurityGroupIngress:
-        - IpProtocol: "tcp"
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 0.0.0.0/0
-      SecurityGroupEgress:
-        - IpProtocol: "tcp"
-          ToPort: 22
-          FromPort: 22
-          CidrIp: !Ref privateSubnet1CidrBlock
-        - IpProtocol: "tcp"
-          ToPort: 22
-          FromPort: 22
-          CidrIp: !Ref privateSubnet2CidrBlock
-      Tags:
-        - Key: Name
-          Value: !Sub ${ENV} security group for bastion hosts
 
   appLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
@@ -196,20 +164,6 @@ Resources:
       SecurityGroups:
         - !Ref applicationServersSecurityGroup
 
-  bastionLaunchConfiguration:
-    Type: AWS::AutoScaling::LaunchConfiguration
-    Properties:
-      AssociatePublicIpAddress: true
-      KeyName: awsKey
-      ImageId: ami-04932daa2567651e7
-      InstanceType: t2.micro
-      BlockDeviceMappings:
-        - DeviceName: "/dev/sdk"
-          Ebs:
-            VolumeSize: 5
-      SecurityGroups:
-        - !Ref bastionHostSecurityGroup
-
   autoscalingGroup1:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
@@ -238,19 +192,7 @@ Resources:
       VPCZoneIdentifier:
         - Fn::ImportValue: !Sub ${ENV}-privateSubnetsList
 
-  bastionAutoscalingGroup:
-    Type: AWS::AutoScaling::AutoScalingGroup
-    Properties:
-      AutoScalingGroupName: Bastion
-      MinSize: "1"
-      MaxSize: "1"
-      DesiredCapacity: "1"
-      HealthCheckGracePeriod: 300
-      LaunchConfigurationName: !Ref bastionLaunchConfiguration
-      VPCZoneIdentifier:
-        - Fn::ImportValue: !Sub ${ENV}-publicSubnetsList
-
 Outputs:
   loadBalancerDnsName:
-    Description:  website url with http:// appended
+    Description: website url with http:// appended
     Value: !Join ["", ["http://", !GetAtt [appLoadBalancer, DNSName]]]
