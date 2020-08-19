@@ -91,6 +91,9 @@ Resources:
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${ENV} security group for load balancer
 
   appLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
@@ -102,6 +105,10 @@ Resources:
       Subnets:
         - Fn::ImportValue: !Sub ${ENV}-publicSubnet1
         - Fn::ImportValue: !Sub ${ENV}-publicSubnet2
+
+      Tags:
+        - Key: Name
+          Value: !Sub ${ENV} application load balancer
 
   appLoadBalancerListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -140,6 +147,9 @@ Resources:
       Protocol: HTTP
       VpcId:
         Fn::ImportValue: !Sub ${ENV}-VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${ENV} application target group.
 
   appLaunchConfiguration:
     Type: AWS::AutoScaling::LaunchConfiguration
@@ -177,6 +187,10 @@ Resources:
       LaunchConfigurationName: !Ref appLaunchConfiguration
       VPCZoneIdentifier:
         - Fn::ImportValue: !Sub ${ENV}-privateSubnetsList
+      Tags:
+        - Key: Name
+          PropagateAtLaunch: true
+          Value: !Sub ${ENV} Application Auto scaling group 1 instances.
 
   autoscalingGroup2:
     Type: AWS::AutoScaling::AutoScalingGroup
@@ -191,6 +205,10 @@ Resources:
       LaunchConfigurationName: !Ref appLaunchConfiguration
       VPCZoneIdentifier:
         - Fn::ImportValue: !Sub ${ENV}-privateSubnetsList
+      Tags:
+        - Key: Name
+          PropagateAtLaunch: true
+          Value: !Sub ${ENV} Application Auto scaling group 2 instances.
 
 Outputs:
   loadBalancerDnsName:
